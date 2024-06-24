@@ -1,0 +1,242 @@
+---
+title: "HT3.2_LR_JMG"
+author: "Jorge Mario García"
+date: "6/23/2024"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Explorando la Regresión Lineal con el Conjunto de Datos Auto MPG: Una Experiencia Personal
+
+La regresión lineal es una técnica fundamental en el análisis de datos que permite comprender y predecir relaciones entre variables. En este artículo, compartiré mi experiencia al trabajar con el conjunto de datos "Auto MPG", un clásico en la comunidad de ciencia de datos que contiene información sobre el consumo de combustible de diferentes automóviles, junto con características como el peso, la aceleración y la potencia. Mi objetivo principal fue explorar cómo estas variables afectan el consumo de combustible (medido en millas por galón, o MPG) y optimizar un modelo de regresión lineal para hacer predicciones precisas.
+
+## Metodología: Pasos en el Análisis de Datos
+
+### Carga y Exploración Inicial de los Datos
+
+El primer paso fue cargar el conjunto de datos "Auto MPG" en R y realizar una inspección inicial para comprender su estructura. Revisé las primeras filas del data frame y verifiqué la presencia de valores NA (ausentes). Este proceso de limpieza es crucial para asegurar que los análisis posteriores sean precisos.
+
+```{r}
+# Carga y exploración de datos
+library(dplyr)
+
+# Importa los datos en R
+df <- read.csv("auto-mpg.csv.xls", stringsAsFactors = FALSE)
+
+# Mostrar las primeras filas
+head(df)
+
+# Examinando la estructura de los datos
+str(df)
+
+# Verificar si hay valores NA
+sum(is.na(df))
+```
+
+```{r}
+# Limpiar los datos (remover filas con NA)
+df <- df %>% na.omit()
+
+# Verificar de nuevo si hay valores NA
+sum(is.na(df))
+
+# Convertir columnas a numeric si es necesario
+df$horsepower <- as.numeric(df$horsepower)
+df <- df %>% na.omit()
+
+# Calcular estadísticas descriptivas de las variables mpg, weight y horsepower
+summary(df %>% select(mpg, weight, horsepower))
+
+```
+
+### Ajuste de Modelos y Análisis de Resultados
+
+Con los datos limpios, el siguiente paso fue ajustar un modelo de regresión lineal simple usando el peso del automóvil como predictor del consumo de combustible. Esta etapa incluyó el ajuste del modelo, la visualización de los resultados y el diagnóstico de problemas comunes como la no linealidad y la heterocedasticidad.
+
+```{r}
+# Regresión Lineal Simple
+modelo <- lm(mpg ~ weight, data = df)
+resumen_modelo <- summary(modelo)
+
+# Imprimir resumen del modelo
+print(resumen_modelo)
+
+# Extraer y imprimir el R cuadrado
+r_squared <- resumen_modelo$r.squared
+r_squared_ajustado <- resumen_modelo$adj.r.squared
+
+cat("R cuadrado: ", r_squared, "\n")
+cat("R cuadrado ajustado: ", r_squared_ajustado, "\n")
+
+```
+
+```{r}
+# Diagnóstico del modelo: gráficos de residuos
+par(mfrow=c(2,2))
+plot(modelo, which = 1:4)
+par(mfrow=c(1,1))
+```
+
+### Transformación de Variables y Diagnóstico de Problemas
+
+Durante el análisis, noté problemas de no linealidad y heterocedasticidad. Para abordar esto, transformé las variables mediante logaritmos y volví a ajustar el modelo. Esta transformación a menudo ayuda a estabilizar la varianza y a linearizar relaciones no lineales.
+
+```{r}
+# Transformación logarítmica
+df <- df %>%
+  mutate(log_mpg = log(mpg),
+         log_weight = log(weight))
+
+# Ajustar el modelo con las variables transformadas
+modelo_log <- lm(log_mpg ~ log_weight, data = df)
+
+# Resumir el modelo transformado
+summary(modelo_log)
+
+# Diagnóstico del modelo transformado: gráficos de residuos
+par(mfrow=c(2,2))
+plot(modelo_log, which = 1:4)
+par(mfrow=c(1,1))
+
+```
+
+### Regresión Lineal Múltiple y Variables Dummy
+
+Para capturar mejor la complejidad de los datos, ajusté un modelo de regresión lineal múltiple incluyendo variables como la potencia y la aceleración. También utilicé variables dummy para representar variables categóricas como el origen del automóvil.
+
+```{r}
+# Regresión Lineal Múltiple
+modelo_multiple <- lm(mpg ~ weight + horsepower + acceleration, data = df)
+resumen_modelo_multi <- summary(modelo_multiple)
+
+# Imprimir resumen del modelo
+print(resumen_modelo_multi)
+
+# Extraer y imprimir el R cuadrado
+r_squared_multi <- resumen_modelo_multi$r.squared
+r_squared_ajustado_multi <- resumen_modelo_multi$adj.r.squared
+
+cat("R cuadrado: ", r_squared_multi, "\n")
+cat("R cuadrado ajustado: ", r_squared_ajustado_multi, "\n")
+
+```
+
+```{r}
+# Evaluar multicolinealidad
+if (!require(car)) install.packages("car")
+library(car)
+vif(modelo_multiple)
+
+# Ajustar el modelo eliminando una variable si hay alta multicolinealidad
+modelo_sin_multicolinealidad <- lm(mpg ~ weight + horsepower, data = df)
+summary(modelo_sin_multicolinealidad)
+
+```
+### Regularización
+
+Para manejar posibles problemas de multicolinealidad y mejorar la precisión del modelo, implementé técnicas de regularización como Ridge y Lasso.
+
+
+```{r}
+# Regularización
+if (!require(glmnet)) install.packages("glmnet")
+library(glmnet)
+
+# Preparar los datos para glmnet
+x <- model.matrix(mpg ~ weight + horsepower + acceleration, data = df)[,-1]
+y <- df$mpg
+
+# Ajustar el modelo Ridge
+modelo_ridge <- cv.glmnet(x, y, alpha = 0)
+
+# Ajustar el modelo Lasso
+modelo_lasso <- cv.glmnet(x, y, alpha = 1)
+
+# Imprimir los coeficientes del modelo Ridge y Lasso
+print(coef(modelo_ridge, s = "lambda.min"))
+print(coef(modelo_lasso, s = "lambda.min"))
+
+```
+
+```{r}
+# Variables Dummy
+df$origin <- as.factor(df$origin)
+dummies <- model.matrix(~ origin - 1, data = df)
+df <- cbind(df, dummies)
+
+# Ajustar el modelo con las variables dummy incluidas
+modelo_dummy <- lm(mpg ~ weight + horsepower + acceleration + origin2 + origin3, data = df)
+resumen_modelo_dummy <- summary(modelo_dummy)
+
+# Imprimir resumen del modelo
+print(resumen_modelo_dummy)
+
+# Evaluación de multicolinealidad
+vif(modelo_dummy)
+
+# Evaluación de bondad de ajuste
+r_squared_dummy <- resumen_modelo_dummy$r.squared
+r_squared_ajustado_dummy <- resumen_modelo_dummy$adj.r.squared
+
+cat("R cuadrado del modelo con dummies: ", r_squared_dummy, "\n")
+cat("R cuadrado ajustado del modelo con dummies: ", r_squared_ajustado_dummy, "\n")
+
+```
+
+## Resultados: Evaluación y Comparativa de Modelos
+
+Los análisis revelaron que el peso del automóvil tiene una relación inversa significativa con el consumo de combustible, lo que significa que autos más pesados tienden a consumir más combustible. Al comparar los distintos modelos, el modelo de regresión lineal múltiple mostró una mejora significativa en la bondad de ajuste en comparación con el modelo simple.
+
+### Comparativa de Modelos
+
+- **Modelo Simple**: El coeficiente de determinación (R^2) fue modesto, indicando que el peso solo explica una parte del consumo de combustible.
+- **Modelo Transformado**: La transformación logarítmica mejoró la linearidad y la homocedasticidad de los residuos.
+- **Modelo Múltiple**: La inclusión de más variables predictoras y dummies para el origen del automóvil aumentó significativamente el R^2 ajustado, mostrando un mejor ajuste general.
+
+```{r}
+# Modelo Libre: Selección de variables
+df$origin <- as.factor(df$origin)
+dummies <- model.matrix(~ origin - 1, data = df)
+df <- cbind(df, dummies)
+
+modelo_combinado <- lm(mpg ~ weight + horsepower + acceleration + cylinders + displacement + origin2 + origin3, data = df)
+resumen_modelo_combinado <- summary(modelo_combinado)
+
+# Imprimir resumen del modelo
+print(resumen_modelo_combinado)
+
+# Evaluación de bondad de ajuste
+r_squared_combinado <- resumen_modelo_combinado$r.squared
+r_squared_ajustado_combinado <- resumen_modelo_combinado$adj.r.squared
+
+cat("R cuadrado del modelo combinado: ", r_squared_combinado, "\n")
+cat("R cuadrado ajustado del modelo combinado: ", r_squared_ajustado_combinado, "\n")
+
+# Evaluación del modelo: gráficos de residuos
+par(mfrow=c(2,2))
+plot(modelo_combinado, which = 1:4)
+par(mfrow=c(1,1))
+
+# Evaluación de multicolinealidad
+vif(modelo_combinado)
+
+```
+
+
+## Soluciones y Cambios en los Resultados
+
+La implementación de transformaciones de variables y la inclusión de variables dummy mejoraron considerablemente los resultados del modelo. Las técnicas de regularización como Ridge y Lasso ayudaron a manejar la multicolinealidad, proporcionando modelos más robustos.
+
+## Conclusiones
+
+A través de este análisis, quedó claro que el peso y la potencia son predictores clave del consumo de combustible en automóviles. Además, la importancia de verificar y corregir los supuestos del modelo de regresión lineal no puede ser subestimada. Las transformaciones y técnicas de regularización no solo mejoraron la precisión del modelo, sino que también proporcionaron una comprensión más profunda de las relaciones entre las variables.
+
+### Reflexión Final
+
+Este ejercicio no solo reforzó mi comprensión de la regresión lineal, sino que también destacó la importancia de un enfoque meticuloso en el análisis de datos. Compartir estos aprendizajes puede ayudar a otros entusiastas a evitar errores comunes y a mejorar la calidad de sus análisis.
+
+Espero que esta experiencia y los pasos detallados aquí sean útiles para aquellos que están empezando en el análisis de datos y la regresión lineal. ¡Feliz análisis de datos!
